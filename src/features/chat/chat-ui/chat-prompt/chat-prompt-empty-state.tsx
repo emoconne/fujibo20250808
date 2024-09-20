@@ -124,6 +124,7 @@ const ChatPromptEmptyState: FC<Props> = (props) => {
             setPromptTitle("");
             setPromptContent("");
             const sav = getPrompt();
+            console.log(sav);
           } catch (error) {
             console.error("エラーが発生しました:", error);
             alert("エラーが発生しました"+error);

@@ -33,7 +33,7 @@ export async function queryPrompt(dept:string,usename:string) {
         },
         {
           name: "@usename",
-          value: dept,
+          value: usename,
         },
     ],
   };
