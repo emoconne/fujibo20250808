@@ -51,27 +51,31 @@ export const ChatUI: FC<Prop> = () => {
   };
 
   return (
-      <div className="h-full relative overflow-auto flex-1 bg-card rounded-md shadow-md">
-          <Tabs value={value} onChange={handleChange} aria-label="設定画面">
-            <Tab icon={<MessageCircle />} label="チャット画面" {...a11yProps(0)} />
-          </Tabs>
- 
-        <CustomTabPanel value={value} index={0}>
-            {messages.length !== 0 ? (
-              <ChatMessageContainer />
-            ) : (
-              <ChatMessageEmptyState />
-            )}
-          <div className="flex flex-col h-full overflow-auto">
-            {/* Other content here */}
-            <div className="mt-auto">
-            <br/><br/><br/>
-              <ChatInput />
-            </div>
-          </div>   
-        </CustomTabPanel>
+    <div className="h-full relative overflow-auto flex-1 bg-card rounded-md shadow-md">
+    <Tabs value={value} onChange={handleChange} aria-label="設定画面">
+      <Tab icon={<MessageCircle />} label="チャット画面" {...a11yProps(0)} />
+      <Tab icon={<Lightbulb />} label="プロンプト集" {...a11yProps(1)} />
+    </Tabs>
+
+  <CustomTabPanel value={value} index={0}>
+      {messages.length !== 0 ? (
+        <ChatMessageContainer />
+      ) : (
+        <ChatMessageEmptyState />
+      )}
+    <div className="flex flex-col h-full overflow-auto">
+      {/* Other content here */}
+      <div className="mt-auto">
+      <br/><br/><br/>
+        <ChatInput />
+      </div>
+    </div>   
+  </CustomTabPanel>
 
 
-    </div>
+  <CustomTabPanel value={value} index={1}>
+    <ChatPromptEmptyState />
+  </CustomTabPanel>
+</div>
   );
 };

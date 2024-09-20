@@ -79,3 +79,15 @@ export interface ServerActionResponse<T> {
   error: string;
   response: T;
 }
+
+
+export interface PromptList {
+  id: string;
+  title: string;
+  content: string;
+  dept: string;
+/*  createdAt: Date;
+  userId: string;
+  useName: string;
+  isDeleted: boolean;*/
+}
