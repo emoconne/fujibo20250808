@@ -38,22 +38,21 @@ jobs:
             az bicep version
             
             echo "Building Bicep template..."
-            az bicep build -f infra/main.bicep --stdout 2>&1 | tee bicep-output.log
-            
-            # エラーの有無を確認
-            if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            if az bicep build -f infra/main.bicep --stdout > bicep-output.log 2>&1; then
               echo "✅ Bicep build succeeded"
               echo "bicep_build_success=true" >> $GITHUB_OUTPUT
+              echo "BICEP_BUILD_SUCCESS=true" >> $GITHUB_ENV
             else
               echo "❌ Bicep build failed"
               echo "bicep_build_success=false" >> $GITHUB_OUTPUT
+              echo "BICEP_BUILD_SUCCESS=false" >> $GITHUB_ENV
               echo "Bicep build errors detected. Please check the logs above."
-              exit 1
+              cat bicep-output.log
             fi
 
       - name: Upload Bicep build logs
         uses: actions/upload-artifact@v4
-        if: always()  # 成功・失敗に関わらず常にログをアップロード
+        if: always() && hashFiles('bicep-output.log') != ''
         with:
           name: bicep-build-logs
           path: bicep-output.log
@@ -62,21 +61,22 @@ jobs:
       - name: Lint Bicep files
         uses: azure/CLI@v1
         continue-on-error: true
-        if: steps.bicep-validation.outputs.bicep_build_success == 'true'
+        if: env.BICEP_BUILD_SUCCESS == 'true'
         with:
           azcliversion: latest
           inlineScript: |
             echo "Running Bicep linter..."
-            az bicep build -f infra/main.bicep --verbose 2>&1 | tee bicep-lint.log
+            az bicep build -f infra/main.bicep --verbose > bicep-lint.log 2>&1
             
             # 警告のカウント
             warning_count=$(grep -c "Warning" bicep-lint.log || echo "0")
             echo "Found $warning_count warnings"
             echo "bicep_warning_count=$warning_count" >> $GITHUB_OUTPUT
+            echo "BICEP_WARNING_COUNT=$warning_count" >> $GITHUB_ENV
 
       - name: Upload Bicep lint logs
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && hashFiles('bicep-lint.log') != ''
         with:
           name: bicep-lint-logs
           path: bicep-lint.log
@@ -87,8 +87,8 @@ jobs:
         if: github.event_name == 'pull_request'
         with:
           script: |
-            const buildSuccess = '${{ steps.bicep-validation.outputs.bicep_build_success }}' === 'true';
-            const warningCount = '${{ steps.bicep-validation.outputs.bicep_warning_count }}' || '0';
+            const buildSuccess = process.env.BICEP_BUILD_SUCCESS === 'true';
+            const warningCount = process.env.BICEP_WARNING_COUNT || '0';
             
             let message = '## 🔧 Bicep Validation Results\n\n';
             
@@ -122,7 +122,7 @@ jobs:
         uses: microsoft/security-devops-action@preview
         id: msdo
         # セキュリティ分析はBicepビルドが成功した場合のみ実行
-        if: steps.bicep-validation.outputs.bicep_build_success == 'true'
+        if: env.BICEP_BUILD_SUCCESS == 'true'
         continue-on-error: true
         with:
           tools: templateanalyzer
@@ -131,7 +131,7 @@ jobs:
 
       - name: Upload alerts to Security tab
         uses: github/codeql-action/upload-sarif@v3
-        if: steps.msdo.outputs.sarifFile && steps.bicep-validation.outputs.bicep_build_success == 'true'
+        if: steps.msdo.outputs.sarifFile && env.BICEP_BUILD_SUCCESS == 'true'
         continue-on-error: true
         with:
           sarif_file: ${{ steps.msdo.outputs.sarifFile }}
@@ -139,7 +139,8 @@ jobs:
       - name: Set job status
         if: always()
         run: |
-          if [[ "${{ steps.bicep-validation.outputs.bicep_build_success }}" == "true" ]]; then
+          echo "BICEP_BUILD_SUCCESS value: '$BICEP_BUILD_SUCCESS'"
+          if [[ "$BICEP_BUILD_SUCCESS" == "true" ]]; then
             echo "✅ Workflow completed successfully"
             exit 0
           else
