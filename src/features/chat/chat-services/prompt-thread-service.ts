@@ -156,7 +156,8 @@ export const CreatePromptThread = async (dept:string,title:string,content:string
     title: title,
     dept: dept,
     threadId: "", // Add the missing property threadId
-    content: content // Add the missing property content
+    content: content, // Add the missing property content
+    sortOrder: 0 // Add the missing property sortOrder with a default value
   };
 
   const container = await CosmosDBContainer.getInstance().getContainer();
