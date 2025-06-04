@@ -12,20 +12,117 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # v3から最新のv4に更新
 
-      - name: Build Bicep for linting
-        uses: azure/CLI@v1
+      - name: Setup Azure CLI
+        uses: azure/login@v1
         with:
-          inlineScript: az config set bicep.use_binary_from_path=false && az bicep build -f infra/main.bicep --stdout
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+        continue-on-error: true  # Azure認証が失敗してもビルド検証は続行
+
+      - name: Validate Bicep syntax
+        uses: azure/CLI@v1
+        id: bicep-validation
+        continue-on-error: true  # ビルドエラーがあってもワークフローを続行
+        with:
+          azcliversion: latest  # 明示的にバージョンを指定
+          inlineScript: |
+            echo "Setting up Bicep configuration..."
+            az config set bicep.use_binary_from_path=false
+            az config set core.only_show_errors=false
+            
+            echo "Checking Bicep version..."
+            az bicep version
+            
+            echo "Building Bicep template..."
+            az bicep build -f infra/main.bicep --stdout 2>&1 | tee bicep-output.log
+            
+            # エラーの有無を確認
+            if [ ${PIPESTATUS[0]} -eq 0 ]; then
+              echo "✅ Bicep build succeeded"
+              echo "bicep_build_success=true" >> $GITHUB_OUTPUT
+            else
+              echo "❌ Bicep build failed"
+              echo "bicep_build_success=false" >> $GITHUB_OUTPUT
+              echo "Bicep build errors detected. Please check the logs above."
+              exit 1
+            fi
+
+      - name: Upload Bicep build logs
+        uses: actions/upload-artifact@v3
+        if: always()  # 成功・失敗に関わらず常にログをアップロード
+        with:
+          name: bicep-build-logs
+          path: bicep-output.log
+          retention-days: 30
+
+      - name: Lint Bicep files
+        uses: azure/CLI@v1
+        continue-on-error: true
+        if: steps.bicep-validation.outputs.bicep_build_success == 'true'
+        with:
+          azcliversion: latest
+          inlineScript: |
+            echo "Running Bicep linter..."
+            az bicep build -f infra/main.bicep --verbose 2>&1 | tee bicep-lint.log
+            
+            # 警告のカウント
+            warning_count=$(grep -c "Warning" bicep-lint.log || echo "0")
+            echo "Found $warning_count warnings"
+            echo "bicep_warning_count=$warning_count" >> $GITHUB_OUTPUT
+
+      - name: Upload Bicep lint logs
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: bicep-lint-logs
+          path: bicep-lint.log
+          retention-days: 30
+
+      - name: Comment PR with Bicep results
+        uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const buildSuccess = '${{ steps.bicep-validation.outputs.bicep_build_success }}' === 'true';
+            const warningCount = '${{ steps.bicep-validation.outputs.bicep_warning_count }}' || '0';
+            
+            let message = '## 🔧 Bicep Validation Results\n\n';
+            
+            if (buildSuccess) {
+              message += '✅ **Build Status**: Success\n';
+              message += `⚠️ **Warnings**: ${warningCount}\n\n`;
+              if (parseInt(warningCount) > 0) {
+                message += '**Recommendations**:\n';
+                message += '- Consider addressing the warnings to improve code quality\n';
+                message += '- Check the bicep-lint-logs artifact for details\n';
+              }
+            } else {
+              message += '❌ **Build Status**: Failed\n\n';
+              message += '**Action Required**:\n';
+              message += '- Fix the Bicep template errors before merging\n';
+              message += '- Check the bicep-build-logs artifact for detailed error information\n';
+              message += '- Common issues:\n';
+              message += '  - Invalid property names (e.g., `raiPolicyName`)\n';
+              message += '  - Missing parent properties in child resources\n';
+              message += '  - Outdated API versions\n';
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
 
       - name: Run Microsoft Security DevOps Analysis
         uses: microsoft/security-devops-action@preview
         id: msdo
+        # セキュリティ分析はBicepビルドが成功した場合のみ実行
+        if: steps.bicep-validation.outputs.bicep_build_success == 'true'
         continue-on-error: true
         with:
           tools: templateanalyzer
@@ -34,5 +131,18 @@ jobs:
 
       - name: Upload alerts to Security tab
         uses: github/codeql-action/upload-sarif@v2
+        if: steps.msdo.outputs.sarifFile && steps.bicep-validation.outputs.bicep_build_success == 'true'
+        continue-on-error: true
         with:
           sarif_file: ${{ steps.msdo.outputs.sarifFile }}
+
+      - name: Set job status
+        if: always()
+        run: |
+          if [[ "${{ steps.bicep-validation.outputs.bicep_build_success }}" == "true" ]]; then
+            echo "✅ Workflow completed successfully"
+            exit 0
+          else
+            echo "❌ Workflow completed with errors - please fix Bicep template issues"
+            exit 1
+          fi
