@@ -15,10 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4  # v3から最新のv4に更新
+        uses: actions/checkout@v4
 
       - name: Setup Azure CLI
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
         continue-on-error: true  # Azure認証が失敗してもビルド検証は続行
@@ -52,7 +52,7 @@ jobs:
             fi
 
       - name: Upload Bicep build logs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()  # 成功・失敗に関わらず常にログをアップロード
         with:
           name: bicep-build-logs
@@ -75,7 +75,7 @@ jobs:
             echo "bicep_warning_count=$warning_count" >> $GITHUB_OUTPUT
 
       - name: Upload Bicep lint logs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: bicep-lint-logs
@@ -83,7 +83,7 @@ jobs:
           retention-days: 30
 
       - name: Comment PR with Bicep results
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         if: github.event_name == 'pull_request'
         with:
           script: |
@@ -130,7 +130,7 @@ jobs:
           GDN_TEMPLATEANALYZER_VERBOSE: 1
 
       - name: Upload alerts to Security tab
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: steps.msdo.outputs.sarifFile && steps.bicep-validation.outputs.bicep_build_success == 'true'
         continue-on-error: true
         with:
