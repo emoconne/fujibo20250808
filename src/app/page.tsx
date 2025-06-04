@@ -11,7 +11,7 @@ export default async function Home() {
     redirect("/chat");
   }
   return (
-    <Card className="h-full flex-1 overflow-hidden relative items-center justify-center flex">
+    <Card className="h-full flex-1 overflow-hidden relative items-center justify-center flex bg-card text-card-foreground">
       <LogIn />
     </Card>
   );

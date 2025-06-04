@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const content = await loadContent();
   return (
-    <Card className="h-full flex justify-center flex-1 overflow-y-scroll">
+    <Card className="h-full flex justify-center flex-1 overflow-y-scroll bg-card text-card-foreground">
       <div className="flex flex-col gap-8 py-8">
         <Suspense fallback={"Getting version"}>
           <VersionDisplay />

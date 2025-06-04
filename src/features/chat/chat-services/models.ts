@@ -48,6 +48,7 @@ export interface PromptModel {
   title: string;
   content: string;
   dept: string;
+  sortOrder: number;
 }
 
 export interface PromptGPTBody {
@@ -86,6 +87,8 @@ export interface PromptList {
   title: string;
   content: string;
   dept: string;
+  sortOrder: number;
+  username?: string;
 /*  createdAt: Date;
   userId: string;
   useName: string;

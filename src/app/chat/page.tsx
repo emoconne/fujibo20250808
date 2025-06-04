@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   return (
-    <Card className="h-full items-center flex justify-center flex-1">
+    <Card className="h-full items-center flex justify-center flex-1 bg-card text-card-foreground">
       <StartNewChat />
     </Card>
   );

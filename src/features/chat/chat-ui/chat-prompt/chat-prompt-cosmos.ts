@@ -15,6 +15,7 @@ interface Item {
   usename: string,
   createdAt: Date;
   isDeleted: boolean;
+  sortOrder: number;
 }
 
 export const AddPrompt = async (newPrompt: Item) => {
@@ -27,7 +28,7 @@ export async function queryPrompt(dept: string, usename: string) {
 
   const querySpec: SqlQuerySpec = {
     query:
-      "SELECT * FROM c WHERE c.dept = @dept AND c.usename = @usename AND c.isDeleted = @isDeleted",
+      "SELECT * FROM c WHERE c.dept = @dept AND c.usename = @usename AND c.isDeleted = @isDeleted ORDER BY c.sortOrder ASC",
     parameters: [
       {
         name: "@dept",
@@ -91,5 +92,43 @@ export async function updateItem(id: string, newTitle: string, newContent: strin
     return updatedItem;
   } else {
     throw new Error(`Item with id ${id} not found`);
+  }
+}
+
+// 会社全体用プロンプト取得
+export async function queryPromptCompany(dept: string) {
+  const container = await CosmosDBContainer.getInstance().getContainer();
+
+  const querySpec: SqlQuerySpec = {
+    query:
+      "SELECT * FROM c WHERE c.dept = @dept AND c.isDeleted = @isDeleted ORDER BY c.sortOrder ASC",
+    parameters: [
+      {
+        name: "@dept",
+        value: dept,
+      },
+      {
+        name: "@isDeleted",
+        value: false,
+      },
+    ],
+  };
+
+  const { resources } = await container.items
+    .query<PromptList>(querySpec)
+    .fetchAll();
+
+  return resources;
+}
+
+// 複数プロンプトのsortOrderを一括更新
+export async function updateSortOrders(updates: {id: string, sortOrder: number}[]) {
+  const container = await CosmosDBContainer.getInstance().getContainer();
+  for (const {id, sortOrder} of updates) {
+    const { resource: item } = await container.item(id).read<Item>();
+    if (item) {
+      item.sortOrder = sortOrder;
+      await container.item(id).replace(item);
+    }
   }
 }
