@@ -1,46 +1,3 @@
-export class GoogleSearchResult {
-  async SearchWeb(searchText: string) {
-    const apiKey = process.env.GOOGLE_CUSTOM_SEARCH_API_KEY;
-    const searchEngineId = process.env.GOOGLE_CUSTOM_SEARCH_ENGINE_ID;
-    
-    if (!apiKey || !searchEngineId) {
-      throw new Error('Google Custom Search API設定が不完全です。API_KEYとSEARCH_ENGINE_IDを設定してください。');
-    }
-
-    const url = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${searchEngineId}&q=${encodeURIComponent(searchText)}&num=10&lr=lang_ja`;
-    
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Google Custom Search API Error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      // Bing APIと同じ形式に変換
-      return {
-        webPages: {
-          value: data.items?.map((item: any, index: number) => ({
-            name: item.title || `検索結果 ${index + 1}`,
-            snippet: item.snippet || '',
-            url: item.link || '',
-            sortOrder: index
-          })) || []
-        }
-      };
-    } catch (err) {
-      console.error('Google Custom Search API Error:', err);
-      throw err;
-    }
-  }
-}
-
 // Azure AI Projects SDK経由でのWeb検索
 export class BingSearchResult {
   async SearchWeb(searchText: string) {
@@ -68,106 +25,151 @@ export class BingSearchResult {
       console.log('Agent ID:', agentId);
       console.log('Search Text:', searchText);
 
-      // Azure AI Projects SDKの動的インポート
-      const { AIProjectClient } = await import("@azure/ai-projects");
-      const { DefaultAzureCredential } = await import("@azure/identity");
+      // タイムアウト付きでAzure AI Projects SDKを実行
+      const result = await Promise.race([
+        this.executeAzureAISearch(projectEndpoint, agentId, searchText),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Azure AI Projects SDK timeout')), 30000)
+        )
+      ]);
 
-      console.log('Using Entra authentication with Azure CLI...');
-      const project = new AIProjectClient(projectEndpoint, new DefaultAzureCredential());
+      return result;
+    } catch (err) {
+      console.error('Azure AI Project error:', err);
       
-      // エージェントを取得
-      const agent = await project.agents.getAgent(agentId);
-      console.log(`Retrieved agent: ${agent.name}`);
-
-      // スレッドを作成
-      const thread = await project.agents.threads.create();
-      console.log(`Created thread, ID: ${thread.id}`);
-
-      // メッセージを作成
-      const message = await project.agents.messages.create(thread.id, "user", searchText);
-      console.log(`Created message, ID: ${message.id}`);
-
-      // ランを作成
-      let run = await project.agents.runs.create(thread.id, agent.id);
-      console.log(`Created run, ID: ${run.id}`);
-
-      // ランが完了するまでポーリング
-      while (run.status === "queued" || run.status === "in_progress") {
-        // 1秒待機
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        run = await project.agents.runs.get(thread.id, run.id);
-        console.log(`Run status: ${run.status}`);
-      }
-
-      if (run.status === "failed") {
-        console.error(`Run failed: `, run.lastError);
-        throw new Error(`Agent run failed: ${run.lastError?.message || 'Unknown error'}`);
-      }
-
-      console.log(`Run completed with status: ${run.status}`);
-
-      // メッセージを取得
-      const messages = await project.agents.messages.list(thread.id, { order: "asc" });
-
-      // メッセージから検索結果を抽出
-      const searchResults = [];
-      for await (const m of messages) {
-        const content = m.content.find((c: any) => c.type === "text" && "text" in c);
-        if (content && m.role === "assistant" && "text" in content) {
-          const textValue = (content as any).text.value;
-          console.log(`Assistant response: ${textValue}`);
-          
-          // テキストからURLを抽出
-          const urls = this.extractUrls(textValue);
-          
-          // アシスタントの応答を検索結果として構造化
-          searchResults.push({
-            name: `${searchText} - AI回答`,
-            snippet: textValue,
-            url: urls.length > 0 ? urls[0] : '#',
-            sortOrder: 0
-          });
-          
-          // 抽出されたURLを個別の検索結果として追加
-          urls.forEach((url: string, index: number) => {
-            if (index > 0) { // 最初のURLは既に上記で使用済み
-              searchResults.push({
-                name: `関連リンク ${index + 1}`,
-                snippet: `「${searchText}」に関する関連リンクです。`,
-                url: url,
-                sortOrder: index + 1
-              });
-            }
-          });
-        }
-      }
-
-      // スレッドを削除（クリーンアップ）
-      try {
-        await project.agents.threads.delete(thread.id);
-        console.log(`Deleted thread: ${thread.id}`);
-      } catch (cleanupError) {
-        console.warn('Failed to cleanup thread:', cleanupError);
-      }
-      
+      // エラーが発生した場合は基本的な検索結果を返す
       return {
         webPages: {
-          value: searchResults.length > 0 ? searchResults : [
+          value: [
             {
               name: '検索結果',
-              snippet: '検索結果が見つかりませんでした。',
+              snippet: `「${searchText}」についての検索中にエラーが発生しました。しばらく時間をおいて再度お試しください。`,
               url: '#',
               sortOrder: 0
             }
           ]
         }
       };
-    } catch (err) {
-      console.error('Azure AI Project error:', err);
-      
-      // フォールバック: 基本的なWeb検索エンジンを使用
-      return await this.fallbackSearch(searchText);
     }
+  }
+
+  private async executeAzureAISearch(projectEndpoint: string, agentId: string, searchText: string) {
+    // Azure AI Projects SDKの動的インポート
+    const { AIProjectClient } = await import("@azure/ai-projects");
+    const { DefaultAzureCredential } = await import("@azure/identity");
+
+    console.log('Using Entra authentication with Azure CLI...');
+    const project = new AIProjectClient(projectEndpoint, new DefaultAzureCredential());
+    
+    // エージェントを取得
+    const agent = await project.agents.getAgent(agentId);
+    console.log(`Retrieved agent: ${agent.name}`);
+
+    // スレッドを作成
+    const thread = await project.agents.threads.create();
+    console.log(`Created thread, ID: ${thread.id}`);
+
+    // メッセージを作成（プロンプトを工夫して関連URLを含む結果を取得）
+    const enhancedPrompt = `以下の検索クエリについて、詳細な情報と関連するURLを含めて回答してください：
+
+検索クエリ: "${searchText}"
+
+回答の形式：
+1. 検索クエリに関する詳細な情報を提供してください
+2. 関連する信頼できるWebサイトのURLを複数含めてください
+3. 各URLについて簡単な説明も添えてください
+4. 情報源として引用できる公式サイトや信頼できるニュースサイトを優先してください
+
+URLは以下のような形式で含めてください：
+- 公式サイト: https://example.com (公式サイトの説明)
+- 関連情報: https://example2.com (関連情報の説明)
+- ニュース記事: https://example3.com (ニュース記事の説明)
+
+重要：
+- 検索結果には必ず具体的なURLを含めてください
+- 各URLには説明文を添えてください
+- 信頼できる情報源を優先してください
+- 複数の異なる情報源を含めてください`;
+    
+    const message = await project.agents.messages.create(thread.id, "user", enhancedPrompt);
+    console.log(`Created message with enhanced prompt, ID: ${message.id}`);
+
+    // ランを作成
+    let run = await project.agents.runs.create(thread.id, agent.id);
+    console.log(`Created run, ID: ${run.id}`);
+
+    // ランが完了するまでポーリング
+    while (run.status === "queued" || run.status === "in_progress") {
+      // 1秒待機
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      run = await project.agents.runs.get(thread.id, run.id);
+      console.log(`Run status: ${run.status}`);
+    }
+
+    if (run.status === "failed") {
+      console.error(`Run failed: `, run.lastError);
+      throw new Error(`Agent run failed: ${run.lastError?.message || 'Unknown error'}`);
+    }
+
+    console.log(`Run completed with status: ${run.status}`);
+
+    // メッセージを取得
+    const messages = await project.agents.messages.list(thread.id, { order: "asc" });
+
+    // メッセージから検索結果を抽出
+    const searchResults = [];
+    for await (const m of messages) {
+      const content = m.content.find((c: any) => c.type === "text" && "text" in c);
+      if (content && m.role === "assistant" && "text" in content) {
+        const textValue = (content as any).text.value;
+        console.log(`Assistant response: ${textValue}`);
+        
+        // テキストからURLを抽出
+        const urls = this.extractUrls(textValue);
+        
+        // メインのAI回答を検索結果として追加
+        searchResults.push({
+          name: `${searchText} - AI回答`,
+          snippet: textValue,
+          url: urls.length > 0 ? urls[0] : '#',
+          sortOrder: 0
+        });
+        
+        // 抽出されたURLを個別の検索結果として追加（説明付き）
+        urls.forEach((url: string, index: number) => {
+          // URLの説明を抽出（URLの前後のテキストから）
+          const urlDescription = this.extractUrlDescription(textValue, url);
+          
+          searchResults.push({
+            name: urlDescription || `関連リンク ${index + 1}`,
+            snippet: urlDescription || `「${searchText}」に関する関連情報です。`,
+            url: url,
+            sortOrder: index + 1
+          });
+        });
+      }
+    }
+
+    // スレッドを削除（クリーンアップ）
+    try {
+      await project.agents.threads.delete(thread.id);
+      console.log(`Deleted thread: ${thread.id}`);
+    } catch (cleanupError) {
+      console.warn('Failed to cleanup thread:', cleanupError);
+    }
+    
+    return {
+      webPages: {
+        value: searchResults.length > 0 ? searchResults : [
+          {
+            name: '検索結果',
+            snippet: '検索結果が見つかりませんでした。',
+            url: '#',
+            sortOrder: 0
+          }
+        ]
+      }
+    };
   }
 
   private extractUrls(text: string): string[] {
@@ -177,72 +179,23 @@ export class BingSearchResult {
     return urls;
   }
 
-  private async fallbackSearch(searchText: string) {
-    // DuckDuckGo検索をフォールバックとして使用
-    console.log('Using DuckDuckGo fallback search for:', searchText);
+  private extractUrlDescription(text: string, url: string): string {
+    // URLの前後のテキストから説明を抽出
+    const urlIndex = text.indexOf(url);
+    if (urlIndex === -1) return '';
     
-    try {
-      const response = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(searchText)}&format=json&no_html=1&skip_disambig=1`);
-      
-      if (!response.ok) {
-        throw new Error(`DuckDuckGo API Error: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      const results = [];
-      
-      // 抽象的な回答を追加
-      if (data.Abstract) {
-        results.push({
-          name: `${searchText} - 概要`,
-          snippet: data.Abstract,
-          url: data.AbstractURL || '#',
-          sortOrder: 0
-        });
-      }
-      
-      // 関連リンクを追加
-      if (data.RelatedTopics && data.RelatedTopics.length > 0) {
-        data.RelatedTopics.slice(0, 5).forEach((topic: any, index: number) => {
-          if (topic.FirstURL) {
-            results.push({
-              name: topic.Text || `関連リンク ${index + 1}`,
-              snippet: topic.Text || `「${searchText}」に関する関連情報です。`,
-              url: topic.FirstURL,
-              sortOrder: index + 1
-            });
-          }
-        });
-      }
-      
-      return {
-        webPages: {
-          value: results.length > 0 ? results : [
-            {
-              name: '検索結果',
-              snippet: `「${searchText}」についての検索結果が見つかりませんでした。`,
-              url: '#',
-              sortOrder: 0
-            }
-          ]
-        }
-      };
-    } catch (error) {
-      console.error('DuckDuckGo fallback search error:', error);
-      
-      return {
-        webPages: {
-          value: [
-            {
-              name: '検索結果',
-              snippet: `「${searchText}」についての検索結果です。詳細な情報については、別の検索エンジンをご利用ください。`,
-              url: '#',
-              sortOrder: 0
-            }
-          ]
-        }
-      };
-    }
+    // URLの前後50文字を取得
+    const start = Math.max(0, urlIndex - 50);
+    const end = Math.min(text.length, urlIndex + url.length + 50);
+    const context = text.substring(start, end);
+    
+    // URLを除去して説明部分を抽出
+    const description = context.replace(url, '').trim();
+    
+    // 説明が短すぎる場合は空文字を返す
+    if (description.length < 10) return '';
+    
+    // 説明を適切な長さに切り詰める
+    return description.length > 100 ? description.substring(0, 100) + '...' : description;
   }
 }
