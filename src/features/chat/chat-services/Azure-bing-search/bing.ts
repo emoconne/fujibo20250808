@@ -109,23 +109,38 @@ export class BingSearchResult {
       // メッセージを取得
       const messages = await project.agents.messages.list(thread.id, { order: "asc" });
 
-                    // メッセージから検索結果を抽出
-       const searchResults = [];
-       for await (const m of messages) {
-         const content = m.content.find((c: any) => c.type === "text" && "text" in c);
-         if (content && m.role === "assistant" && "text" in content) {
-           const textValue = (content as any).text.value;
-           console.log(`Assistant response: ${textValue}`);
-           
-           // アシスタントの応答を検索結果として構造化
-           searchResults.push({
-             name: `${searchText} - AI回答`,
-             snippet: textValue,
-             url: '#',
-             sortOrder: 0
-           });
-         }
-       }
+      // メッセージから検索結果を抽出
+      const searchResults = [];
+      for await (const m of messages) {
+        const content = m.content.find((c: any) => c.type === "text" && "text" in c);
+        if (content && m.role === "assistant" && "text" in content) {
+          const textValue = (content as any).text.value;
+          console.log(`Assistant response: ${textValue}`);
+          
+          // テキストからURLを抽出
+          const urls = this.extractUrls(textValue);
+          
+          // アシスタントの応答を検索結果として構造化
+          searchResults.push({
+            name: `${searchText} - AI回答`,
+            snippet: textValue,
+            url: urls.length > 0 ? urls[0] : '#',
+            sortOrder: 0
+          });
+          
+          // 抽出されたURLを個別の検索結果として追加
+          urls.forEach((url: string, index: number) => {
+            if (index > 0) { // 最初のURLは既に上記で使用済み
+              searchResults.push({
+                name: `関連リンク ${index + 1}`,
+                snippet: `「${searchText}」に関する関連リンクです。`,
+                url: url,
+                sortOrder: index + 1
+              });
+            }
+          });
+        }
+      }
 
       // スレッドを削除（クリーンアップ）
       try {
@@ -155,21 +170,79 @@ export class BingSearchResult {
     }
   }
 
+  private extractUrls(text: string): string[] {
+    // URLを抽出する正規表現
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urls = text.match(urlRegex) || [];
+    return urls;
+  }
+
   private async fallbackSearch(searchText: string) {
-    // フォールバック検索の実装
-    console.log('Using fallback search for:', searchText);
+    // DuckDuckGo検索をフォールバックとして使用
+    console.log('Using DuckDuckGo fallback search for:', searchText);
     
-    return {
-      webPages: {
-        value: [
-          {
-            name: 'フォールバック検索結果',
-            snippet: `「${searchText}」についての検索結果です。詳細な情報については、別の検索エンジンをご利用ください。`,
-            url: '#',
-            sortOrder: 0
-          }
-        ]
+    try {
+      const response = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(searchText)}&format=json&no_html=1&skip_disambig=1`);
+      
+      if (!response.ok) {
+        throw new Error(`DuckDuckGo API Error: ${response.status}`);
       }
-    };
+      
+      const data = await response.json();
+      
+      const results = [];
+      
+      // 抽象的な回答を追加
+      if (data.Abstract) {
+        results.push({
+          name: `${searchText} - 概要`,
+          snippet: data.Abstract,
+          url: data.AbstractURL || '#',
+          sortOrder: 0
+        });
+      }
+      
+      // 関連リンクを追加
+      if (data.RelatedTopics && data.RelatedTopics.length > 0) {
+        data.RelatedTopics.slice(0, 5).forEach((topic: any, index: number) => {
+          if (topic.FirstURL) {
+            results.push({
+              name: topic.Text || `関連リンク ${index + 1}`,
+              snippet: topic.Text || `「${searchText}」に関する関連情報です。`,
+              url: topic.FirstURL,
+              sortOrder: index + 1
+            });
+          }
+        });
+      }
+      
+      return {
+        webPages: {
+          value: results.length > 0 ? results : [
+            {
+              name: '検索結果',
+              snippet: `「${searchText}」についての検索結果が見つかりませんでした。`,
+              url: '#',
+              sortOrder: 0
+            }
+          ]
+        }
+      };
+    } catch (error) {
+      console.error('DuckDuckGo fallback search error:', error);
+      
+      return {
+        webPages: {
+          value: [
+            {
+              name: '検索結果',
+              snippet: `「${searchText}」についての検索結果です。詳細な情報については、別の検索エンジンをご利用ください。`,
+              url: '#',
+              sortOrder: 0
+            }
+          ]
+        }
+      };
+    }
   }
 }
