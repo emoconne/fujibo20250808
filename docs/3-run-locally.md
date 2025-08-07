@@ -68,9 +68,18 @@ Clone this repository locally or fork to your Github account. Run all of the the
    AZURE_SEARCH_INDEX_NAME=
    AZURE_SEARCH_API_VERSION="2023-07-01-Preview"
 
-   # Azure bing search to extract content from your data
-   AZURE_BINGSEARCH_API_KEY=
+   # Azure AI Foundry Agent for web search (replaces deprecated Bing Search API)
+   # Note: Requires Azure AI Foundry resource with Agent configured
+   AZURE_AI_FOUNDRY_ENDPOINT=
+   AZURE_AI_FOUNDRY_API_KEY=
+   AZURE_AI_FOUNDRY_AGENT_ID=
 
+   # Azure Storage for document management
+   AZURE_STORAGE_CONNECTION_STRING=
+   AZURE_STORAGE_CONTAINER_NAME=documents
+
+   # Azure Cognitive Search for document indexing
+   AZURE_SEARCH_ENDPOINT=
 
    # Azure AI Document Intelligence to extract content from your data
 

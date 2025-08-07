@@ -8,6 +8,7 @@
 1. [Add identity provider](/docs/5-add-identity.md)
 1. [Chatting with your file](/docs/6-chat-over-file.md)
 1. [Environment variables](/docs/7-environment-variables.md)
+1. [Azure AI Foundry Agent Setup](/docs/9-azure-ai-foundry-setup.md)
 
 # Introduction
 

@@ -13,7 +13,7 @@ import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import { CheckIcon, ClipboardIcon, UserCircle } from "lucide-react";
 import { useSession } from "next-auth/react";
-import {AddPrompt,queryPrompt,markAsDeleted,updateItem, updateSortOrders} from "@/features/chat/chat-ui/chat-prompt/chat-prompt-cosmos";
+import {AddPrompt,queryPrompt,queryPromptCompany,markAsDeleted,updateItem, updateSortOrders} from "@/features/chat/chat-ui/chat-prompt/chat-prompt-cosmos";
 import { PromptList } from "@/features/chat/chat-services/models";
 import { Trash } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
@@ -88,7 +88,7 @@ const ChatPromptEmptyState: FC<Props> = (props) => {
       // 個人と会社のデータを並列取得で高速化
       const [personalList, companyList] = await Promise.all([
         queryPrompt("個人", session.user.name),
-        queryPrompt("会社全体", session.user.name)
+        queryPromptCompany("会社全体")
       ]);
 
       const formattedPersonal = personalList.map(item => ({ 

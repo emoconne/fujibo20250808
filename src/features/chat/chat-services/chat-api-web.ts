@@ -30,18 +30,42 @@ export const ChatAPIWeb = async (props: PromptGPTProps) => {
 //  console.log("PromptGPTProps_web: ", props.chatAPIModel);
 
   const bing = new BingSearchResult();
-  const searchResult = await bing.SearchWeb(lastHumanMessage.content);
+  let searchResult;
+  
+  try {
+    searchResult = await bing.SearchWeb(lastHumanMessage.content);
+  } catch (error) {
+    console.error('Search API error:', error);
+    // 検索エラーの場合、デフォルトの結果を設定
+    searchResult = {
+      webPages: {
+        value: [
+          {
+            name: '検索エラー',
+            snippet: '検索サービスが利用できません。一般的な知識に基づいて回答いたします。',
+            url: '',
+            displayUrl: ''
+          }
+        ]
+      }
+    };
+  }
 
-  snippet = searchResult.webPages.value[0].snippet;
-  snippet += searchResult.webPages.value[1].snippet;
-  snippet += searchResult.webPages.value[2].snippet;
-  snippet += searchResult.webPages.value[3].snippet;
-  snippet += searchResult.webPages.value[4].snippet; 
-  snippet += searchResult.webPages.value[5].snippet; 
-  snippet += searchResult.webPages.value[6].snippet; 
-  snippet += searchResult.webPages.value[7].snippet; 
-  snippet += searchResult.webPages.value[8].snippet; 
-  snippet += searchResult.webPages.value[9].snippet; 
+  // 検索結果の安全な処理
+  const webPages = searchResult?.webPages?.value || [];
+  snippet = '';
+  
+  // 最大10件まで安全に処理
+  for (let i = 0; i < Math.min(webPages.length, 10); i++) {
+    if (webPages[i]?.snippet) {
+      snippet += webPages[i].snippet + ' ';
+    }
+  }
+  
+  // 検索結果がない場合のデフォルトメッセージ
+  if (!snippet.trim()) {
+    snippet = '検索結果が見つかりませんでした。一般的な知識に基づいて回答いたします。';
+  } 
 
 
 /*   // ブラウザを起動
@@ -59,11 +83,17 @@ export const ChatAPIWeb = async (props: PromptGPTProps) => {
 　// ブラウザを閉じる
   await browser.close()
  */
-  BingResult = + searchResult.webPages.value[0].name + "\n" + searchResult.webPages.value[0].snippet + "\n";
-  BingResult += + searchResult.webPages.value[1].name + "\n" + searchResult.webPages.value[1].snippet + "\n";
-  BingResult += + searchResult.webPages.value[2].name + "\n" + searchResult.webPages.value[2].snippet + "\n";
-  BingResult += + searchResult.webPages.value[3].name + "\n" + searchResult.webPages.value[3].snippet + "\n";
-  BingResult += + searchResult.webPages.value[4].name + "\n" + searchResult.webPages.value[4].snippet + "\n";
+  // BingResultの安全な処理
+  BingResult = '';
+  for (let i = 0; i < Math.min(webPages.length, 5); i++) {
+    if (webPages[i]?.name && webPages[i]?.snippet) {
+      BingResult += webPages[i].name + "\n" + webPages[i].snippet + "\n";
+    }
+  }
+  
+  if (!BingResult.trim()) {
+    BingResult = '検索結果が見つかりませんでした。';
+  }
 
   //console.log(snippet) ;
   Prompt = "次の{問い合わせ}について、{Web検索結果}を元に2000文字程度で回答を生成してください。" ;

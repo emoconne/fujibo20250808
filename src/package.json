@@ -10,8 +10,9 @@
   },
   "dependencies": {
     "@azure/ai-form-recognizer": "^5.0.0",
+    "@azure/ai-projects": "^1.0.0",
     "@azure/cosmos": "^4.0.0",
-    "@azure/identity": "^3.3.2",
+    "@azure/identity": "^4.11.1",
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.5",
     "@markdoc/markdoc": "^0.3.4",

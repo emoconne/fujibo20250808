@@ -1,7 +1,12 @@
 "use server";
 import { APP_VERSION } from "@/app-global";
 
-export const appVersionDetails = async () => {
+interface AppVersionDetails {
+  version: string;
+  isOutdated: boolean;
+}
+
+export const appVersionDetails = async (): Promise<AppVersionDetails> => {
   const appVersion = await fetch(
     "https://raw.githubusercontent.com/microsoft/azurechat/main/src/package.json",
     {
