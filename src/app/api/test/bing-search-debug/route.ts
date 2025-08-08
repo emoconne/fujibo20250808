@@ -36,20 +36,41 @@ export async function GET(request: NextRequest) {
     
     console.log('Testing Bing search with query:', testQuery);
     
-    const searchResult = await bing.SearchWeb(testQuery);
-    
-    console.log('Search result:', searchResult);
-    
-    return NextResponse.json({
-      success: true,
-      environment: {
-        foundryEndpoint: foundryEndpoint,
-        agentId: agentId,
-        hasApiKey: !!apiKey
-      },
-      testQuery: testQuery,
-      searchResult: searchResult
-    });
+    try {
+      const searchResult = await bing.SearchWeb(testQuery);
+      
+      console.log('Search result:', searchResult);
+      
+      return NextResponse.json({
+        success: true,
+        environment: {
+          foundryEndpoint: foundryEndpoint,
+          agentId: agentId,
+          hasApiKey: !!apiKey
+        },
+        testQuery: testQuery,
+        searchResult: searchResult
+      });
+    } catch (searchError) {
+      console.error('Search execution error:', searchError);
+      console.error('Error stack:', searchError instanceof Error ? searchError.stack : 'No stack trace');
+      
+      return NextResponse.json({
+        success: false,
+        error: '検索実行中にエラーが発生しました',
+        searchError: {
+          message: searchError instanceof Error ? searchError.message : 'Unknown error',
+          stack: searchError instanceof Error ? searchError.stack : undefined,
+          name: searchError instanceof Error ? searchError.name : 'Unknown'
+        },
+        environment: {
+          foundryEndpoint: foundryEndpoint,
+          agentId: agentId,
+          hasApiKey: !!apiKey
+        },
+        testQuery: testQuery
+      }, { status: 500 });
+    }
 
   } catch (error) {
     console.error('Bing Search Debug API error:', error);
