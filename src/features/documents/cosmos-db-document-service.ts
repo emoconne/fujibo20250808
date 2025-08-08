@@ -1,11 +1,7 @@
 "use server";
 
-import { Container, CosmosClient } from "@azure/cosmos";
+import { CosmosDBContainer } from "@/features/common/cosmos-prompt";
 import { SqlQuerySpec } from "@azure/cosmos";
-
-// ドキュメント管理用のCosmosDB設定
-const DOCS_DB_NAME = "documents";
-const DOCS_CONTAINER_NAME = "documents";
 
 export interface DocumentMetadata {
   id: string;
@@ -28,29 +24,9 @@ export interface DocumentMetadata {
   updatedAt: Date;
 }
 
-// ドキュメント管理用のコンテナインスタンスを取得するヘルパー関数
+// コンテナインスタンスを取得するヘルパー関数
 async function getContainer() {
-  const endpoint = process.env.AZURE_COSMOSDB_URI;
-  const key = process.env.AZURE_COSMOSDB_KEY;
-
-  if (!endpoint || !key) {
-    throw new Error('Azure CosmosDB configuration is missing');
-  }
-
-  const client = new CosmosClient({ endpoint, key });
-
-  const databaseResponse = await client.databases.createIfNotExists({
-    id: DOCS_DB_NAME,
-  });
-
-  const containerResponse = await databaseResponse.database.containers.createIfNotExists({
-    id: DOCS_CONTAINER_NAME,
-    partitionKey: {
-      paths: ["/uploadedBy"],
-    },
-  });
-
-  return containerResponse.container;
+  return await CosmosDBContainer.getInstance().getContainer();
 }
 
 // ドキュメントメタデータを保存

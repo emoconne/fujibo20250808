@@ -23,14 +23,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="h-full overflow-hidden">
       <body className={cn(inter.className, "flex w-full h-full")}>
         <GlobalConfigProvider
           config={{ speechEnabled: process.env.PUBLIC_SPEECH_ENABLED }}
         >
           <AuthProvider>
             <Providers>
-              <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+              <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
                 <div
                   className={cn(
                     inter.className,

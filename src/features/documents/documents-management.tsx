@@ -79,22 +79,14 @@ export const DocumentsManagement = () => {
     try {
       setIsLoading(true);
       const response = await fetch('/api/documents');
-      
       if (response.ok) {
         const data = await response.json();
         setDocuments(data.documents || []);
       } else {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('Documents API error:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorData
-        });
-        showError(`ドキュメント一覧の取得に失敗しました: ${errorData.error || response.statusText}`);
+        showError('ドキュメント一覧の取得に失敗しました');
       }
     } catch (error) {
-      console.error('Fetch documents error:', error);
-      showError(`ドキュメント一覧の取得中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      showError('ドキュメント一覧の取得中にエラーが発生しました');
     } finally {
       setIsLoading(false);
     }
