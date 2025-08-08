@@ -9,7 +9,7 @@ import { useSession } from "next-auth/react";
 const SIMPLE_CHAT_LABEL = process.env.NEXT_PUBLIC_SIMPLE_CHAT_TYPE_LABEL || "通常利用";
 const WEB_CHAT_LABEL = process.env.NEXT_PUBLIC_WEB_CHAT_TYPE_LABEL || "Web検索";
 const DATA_CHAT_LABEL = process.env.NEXT_PUBLIC_DATA_CHAT_TYPE_LABEL || "ファイル読込";
-const DOC_CHAT_LABEL = process.env.NEXT_PUBLIC_DOC_CHAT_TYPE_LABEL || "規程事務取検索(総務)";
+const DOC_CHAT_LABEL = process.env.NEXT_PUBLIC_DOC_CHAT_TYPE_LABEL || "準備中";
 
 interface Prop {
   disable: boolean;

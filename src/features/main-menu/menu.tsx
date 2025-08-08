@@ -57,7 +57,7 @@ export const MainMenu = () => {
                 <LayoutDashboard />
               </Link>
             </Button>
-            <Button
+            {/* <Button
               asChild
               className="rounded-full w-[40px] h-[40px] p-2 text-primary"
               variant={"outline"}
@@ -65,7 +65,7 @@ export const MainMenu = () => {
               <Link href="/documents" title="ドキュメント管理">
                 <FileText />
               </Link>
-            </Button>
+            </Button> */}
           </>
         ) : (
           <></>
