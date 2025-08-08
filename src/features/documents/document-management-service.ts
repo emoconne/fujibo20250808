@@ -2,6 +2,7 @@
 
 import { uploadFile, downloadFile, deleteFile, listUserFiles } from "./azure-blob-service";
 import { extractText, isSupportedFileType, isFileSizeValid } from "./azure-document-intelligence-service";
+import { generateEmbeddings } from "../common/azure-openai-embedding";
 import { indexDocument, deleteDocument as deleteSearchDocument, searchDocuments as searchDocumentsService, getAllDocuments as getAllSearchDocuments, getDocument as getSearchDocument, getIndexStats, SearchDocument } from "./azure-cognitive-search-service";
 import { saveDocument, updateDocument, deleteDocument as deleteCosmosDocument, getAllDocuments, getDocument as getCosmosDocument, getDocumentStats, updateDocumentTags as updateDocumentTagsService, updateDocumentCategories as updateDocumentCategoriesService, updateDocumentDescription as updateDocumentDescriptionService, DocumentMetadata } from "./cosmos-db-document-service";
 import { userHashedId } from "@/features/auth/helpers";
@@ -32,19 +33,40 @@ export interface UploadResult {
 
 // バックグラウンドでドキュメントを処理
 async function processDocumentInBackground(documentId: string, file: File, blobName: string) {
+  console.log('=== BACKGROUND PROCESSING START ===');
   try {
+    console.log('Debug: Starting background document processing', { documentId, fileName: file.name });
+    
     // ステータスを処理中に更新
+    console.log('Debug: Updating document status to processing');
     await updateDocument(documentId, { status: 'processing' });
 
     // 1. Document Intelligenceでテキスト抽出
+    console.log('Debug: Converting file to ArrayBuffer');
     const arrayBuffer = await file.arrayBuffer();
+    console.log('Debug: ArrayBuffer created', { byteLength: arrayBuffer.byteLength });
+    
+    console.log('Debug: Starting text extraction with Document Intelligence');
     const extractedText = await extractText(arrayBuffer, file.name);
+    console.log('Debug: Text extraction completed', { 
+      contentLength: extractedText.content.length,
+      pages: extractedText.pages,
+      confidence: extractedText.confidence,
+      wordCount: extractedText.wordCount,
+      processingTime: extractedText.processingTime
+    });
+    
+    // 2. Embeddingを生成
+    console.log('Debug: Generating embeddings');
+    const embeddings = await generateEmbeddings(extractedText.content);
+    console.log('Debug: Embeddings generated, length:', embeddings.length);
 
     // 2. Azure Cognitive Searchにインデックス作成
     const searchDocument: SearchDocument = {
       id: documentId,
       fileName: file.name,
       content: extractedText.content,
+      contentVector: embeddings,
       fileType: file.type,
       fileSize: file.size,
       uploadedBy: await userHashedId(),
@@ -68,9 +90,19 @@ async function processDocumentInBackground(documentId: string, file: File, blobN
     console.log(`Document processing completed: ${documentId}`);
 
   } catch (error) {
-    console.error("Document processing error:", error);
+    console.error("=== DOCUMENT PROCESSING ERROR ===");
+    console.error("Document processing error:", {
+      error: error instanceof Error ? {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      } : error,
+      documentId,
+      fileName: file.name
+    });
     
     // エラー時はステータスを更新
+    console.log('Debug: Updating document status to error');
     await updateDocument(documentId, { 
       status: 'error' 
     });
@@ -79,8 +111,10 @@ async function processDocumentInBackground(documentId: string, file: File, blobN
 
 // ファイルをアップロードして処理
 export async function uploadAndProcessFile(file: File): Promise<UploadResult> {
+  console.log('=== UPLOAD AND PROCESS FILE START ===');
   try {
     const userId = await userHashedId();
+    console.log('Debug: User ID:', userId);
     
     // 1. ファイルの検証
     if (!(await isSupportedFileType(file.name))) {
@@ -117,17 +151,27 @@ export async function uploadAndProcessFile(file: File): Promise<UploadResult> {
       isDeleted: false,
     });
 
+    console.log('Debug: Starting background processing');
     // 4. バックグラウンドでテキスト抽出とインデックス作成を実行
     processDocumentInBackground(documentId, file, uploadResult.blobName);
 
-    return {
+    const result = {
       success: true,
       documentId,
       message: "ファイルが正常にアップロードされました。処理中です..."
     };
+    console.log('Debug: Returning result:', result);
+    return result;
 
   } catch (error) {
-    console.error("Upload error:", error);
+    console.error("=== UPLOAD ERROR ===");
+    console.error("Upload error:", {
+      error: error instanceof Error ? {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      } : error
+    });
     return {
       success: false,
       message: "アップロードに失敗しました",

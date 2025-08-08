@@ -4,6 +4,7 @@ import { options as authOptions } from "@/features/auth/auth-api";
 import { uploadAndProcessFile } from "@/features/documents/document-management-service";
 
 export async function POST(request: NextRequest) {
+  console.log('=== UPLOAD ROUTE START ===');
   try {
     const session = await getServerSession(authOptions);
     
@@ -15,14 +16,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "管理者権限が必要です" }, { status: 403 });
     }
 
+    console.log('Debug: Starting file upload process');
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
     if (!file) {
+      console.log('Debug: No file found in form data');
       return NextResponse.json({ error: "ファイルが選択されていません" }, { status: 400 });
     }
 
+    console.log('Debug: File details:', {
+      name: file.name,
+      type: file.type,
+      size: file.size
+    });
+
+    console.log('Debug: Calling uploadAndProcessFile');
     const result = await uploadAndProcessFile(file);
+    console.log('Debug: uploadAndProcessFile result:', result);
 
     if (result.success) {
       return NextResponse.json({

@@ -78,8 +78,23 @@ export const similaritySearchVectorWithScore_doc = async (
 ): Promise<Array<AzureCogDocumentIndex_doc & DocumentSearchModel>> => {
   const openai = OpenAIEmbeddingInstance();
 
+  // クエリの検証
+  if (!query || query.trim().length === 0) {
+    console.log('Empty query provided, returning empty results');
+    return [];
+  }
+
+  // 制御文字や無効な文字をチェック
+  const hasInvalidChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(query);
+  if (hasInvalidChars) {
+    console.log('Query contains invalid characters, returning empty results');
+    return [];
+  }
+
+  const cleanQuery = query.trim();
+
   const embeddings = await openai.embeddings.create({
-    input: query,
+    input: cleanQuery,
     model: process.env.AZURE_OPENAI_API_EMBEDDINGS_DEPLOYMENT_NAME,
   });
   const url = `${baseIndexUrl()}/docs/search?api-version=${
@@ -161,17 +176,129 @@ export const embedDocuments_doc = async (
   const openai = OpenAIEmbeddingInstance();
 
   try {
-    const contentsToEmbed = documents.map((d) => d.pageContent);
+    console.log('=== embedDocuments_doc START ===');
+    console.log('Documents to embed:', documents.length);
+    
+    // 各ドキュメントのpageContentの型と内容をログ出力
+    documents.forEach((doc, index) => {
+      console.log(`Document ${index}:`);
+      console.log('  - pageContent type:', typeof doc.pageContent);
+      console.log('  - pageContent is array:', Array.isArray(doc.pageContent));
+      console.log('  - pageContent is object:', doc.pageContent && typeof doc.pageContent === 'object');
+      console.log('  - pageContent value:', doc.pageContent);
+      console.log('  - pageContent length:', doc.pageContent?.length);
+      console.log('  - pageContent keys (if object):', doc.pageContent && typeof doc.pageContent === 'object' ? Object.keys(doc.pageContent) : 'N/A');
+    });
+
+    // 空のテキストや無効な文字をフィルタリング
+    const contentsToEmbed = documents
+      .map((d, index) => {
+        console.log(`Processing document ${index} pageContent:`, d.pageContent);
+        return d.pageContent;
+      })
+      .filter((content: any, index) => {
+        console.log(`Filtering content ${index}:`, content);
+        console.log(`Content type:`, typeof content);
+        console.log(`Content is array:`, Array.isArray(content));
+        
+        // 型チェック: 文字列でない場合は文字列に変換
+        let contentStr = content;
+        if (typeof content !== 'string') {
+          console.log(`Converting non-string content ${index} to string`);
+          if (Array.isArray(content)) {
+            contentStr = content.join(' ');
+            console.log(`Converted array to string:`, contentStr);
+          } else if (content && typeof content === 'object') {
+            contentStr = JSON.stringify(content);
+            console.log(`Converted object to string:`, contentStr);
+          } else {
+            contentStr = String(content || '');
+            console.log(`Converted other type to string:`, contentStr);
+          }
+        }
+
+        // 空の文字列、null、undefinedを除外
+        if (!contentStr || contentStr.trim().length === 0) {
+          console.log(`Filtering out empty content ${index}`);
+          return false;
+        }
+        
+        // 制御文字や無効な文字をチェック
+        const hasInvalidChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(contentStr);
+        if (hasInvalidChars) {
+          console.log(`Filtering out content ${index} with invalid characters`);
+          return false;
+        }
+        
+        console.log(`Content ${index} passed filter`);
+        return true;
+      })
+      .map((content: any, index) => {
+        console.log(`Mapping content ${index}:`, content);
+        // 型チェック: 文字列でない場合は文字列に変換
+        let contentStr = content;
+        if (typeof content !== 'string') {
+          console.log(`Converting non-string content ${index} to string in map`);
+          if (Array.isArray(content)) {
+            contentStr = content.join(' ');
+          } else if (content && typeof content === 'object') {
+            contentStr = JSON.stringify(content);
+          } else {
+            contentStr = String(content || '');
+          }
+        }
+        const trimmed = contentStr.trim();
+        console.log(`Mapped content ${index} result:`, trimmed);
+        return trimmed; // 前後の空白を削除
+      });
+
+    console.log('Valid contents to embed:', contentsToEmbed.length);
+
+    // 有効なコンテンツがない場合は早期リターン
+    if (contentsToEmbed.length === 0) {
+      console.log('No valid content to embed');
+      return;
+    }
 
     const embeddings = await openai.embeddings.create({
       input: contentsToEmbed,
       model: process.env.AZURE_OPENAI_API_EMBEDDINGS_DEPLOYMENT_NAME,
     });
 
-    embeddings.data.forEach((embedding, index) => {
-      documents[index].embedding = embedding.embedding;
+    // embeddingsを対応するドキュメントに割り当て
+    let embeddingIndex = 0;
+    documents.forEach((document, index) => {
+      console.log(`Assigning embedding to document ${index}`);
+      let content: any = document.pageContent;
+      
+      // 型チェック: 文字列でない場合は文字列に変換
+      if (typeof content !== 'string') {
+        console.log(`Converting document ${index} content to string`);
+        if (Array.isArray(content)) {
+          content = content.join(' ');
+        } else if (content && typeof content === 'object') {
+          content = JSON.stringify(content);
+        } else {
+          content = String(content || '');
+        }
+      }
+      
+      const contentStr = content.trim();
+      console.log(`Document ${index} content after trim:`, contentStr);
+      // 有効なコンテンツの場合のみembeddingを割り当て
+      if (contentStr && contentStr.length > 0 && !/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(contentStr)) {
+        if (embeddingIndex < embeddings.data.length) {
+          document.embedding = embeddings.data[embeddingIndex].embedding;
+          console.log(`Assigned embedding ${embeddingIndex} to document ${index}`);
+          embeddingIndex++;
+        }
+      } else {
+        console.log(`Skipped embedding assignment for document ${index}`);
+      }
     });
   } catch (e) {
+    console.error('EmbedDocuments_doc error:', e);
+    console.error('Error stack:', e instanceof Error ? e.stack : 'No stack trace');
     console.log(e);
     const error = e as any;
     throw new Error(`${e} with code ${error.status}`);

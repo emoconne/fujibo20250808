@@ -7,17 +7,30 @@ interface AppVersionDetails {
 }
 
 export const appVersionDetails = async (): Promise<AppVersionDetails> => {
-  const appVersion = await fetch(
-    "https://raw.githubusercontent.com/microsoft/azurechat/main/src/package.json",
-    {
-      cache: "no-cache",
+  try {
+    const appVersion = await fetch(
+      "https://raw.githubusercontent.com/microsoft/azurechat/main/src/package.json",
+      {
+        cache: "no-cache",
+      }
+    );
+
+    if (!appVersion.ok) {
+      throw new Error(`Failed to fetch version: ${appVersion.status}`);
     }
-  );
 
-  const version = (await appVersion.json()).version as string;
-  const isOutdated = isVersionGreater(version, APP_VERSION);
+    const version = (await appVersion.json()).version as string;
+    const isOutdated = isVersionGreater(version, APP_VERSION);
 
-  return { version, isOutdated };
+    return { version, isOutdated };
+  } catch (error) {
+    console.error("Error fetching app version:", error);
+    // エラーが発生した場合は、現在のバージョンが最新であると仮定
+    return { 
+      version: APP_VERSION, 
+      isOutdated: false 
+    };
+  }
 };
 
 function isVersionGreater(version1: string, version2: string): boolean {

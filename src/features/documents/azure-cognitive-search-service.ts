@@ -7,6 +7,7 @@ export interface SearchDocument {
   id: string;
   fileName: string;
   content: string;
+  contentVector?: number[];
   fileType: string;
   fileSize: number;
   uploadedBy: string;
@@ -44,7 +45,8 @@ function createSearchService() {
   }
 
   const searchClient = new SearchClient(
-    `${endpoint}/indexes/${indexName}`,
+    endpoint,
+    indexName,
     new AzureKeyCredential(key)
   );
 
@@ -54,17 +56,56 @@ function createSearchService() {
 }
 
 // テキストの埋め込みベクトルを生成
-async function generateEmbedding(text: string): Promise<number[]> {
+async function generateEmbedding(text: any): Promise<number[]> {
   const { embeddingClient } = createSearchService();
   try {
+    console.log('=== generateEmbedding START ===');
+    console.log('Debug: Input text type:', typeof text);
+    console.log('Debug: Input text is array:', Array.isArray(text));
+    console.log('Debug: Input text is object:', text && typeof text === 'object');
+    console.log('Debug: Input text length:', text?.length);
+    console.log('Debug: Input text preview:', text?.substring ? text.substring(0, 100) : text);
+    
+    // 型チェック: 文字列でない場合は文字列に変換
+    let textStr = text;
+    if (typeof text !== 'string') {
+      console.log('Converting non-string text to string');
+      if (Array.isArray(text)) {
+        textStr = text.join(' ');
+        console.log('Converted array to string:', textStr);
+      } else if (text && typeof text === 'object') {
+        textStr = JSON.stringify(text);
+        console.log('Converted object to string:', textStr);
+      } else {
+        textStr = String(text || '');
+        console.log('Converted other type to string:', textStr);
+      }
+    }
+
+    // テキストの検証
+    if (!textStr || textStr.trim().length === 0) {
+      throw new Error("Empty or invalid text provided for embedding generation");
+    }
+
+    // 制御文字や無効な文字をチェック
+    const hasInvalidChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(textStr);
+    if (hasInvalidChars) {
+      throw new Error("Text contains invalid control characters");
+    }
+
+    const cleanText = textStr.trim();
+    console.log('Clean text for embedding:', cleanText);
+
     const response = await embeddingClient.embeddings.create({
-      input: text,
+      input: cleanText,
       model: process.env.AZURE_OPENAI_API_EMBEDDINGS_DEPLOYMENT_NAME,
     });
 
+    console.log('Embedding generated successfully');
     return response.data[0].embedding;
   } catch (error) {
     console.error('Embedding generation error:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     throw new Error(`埋め込みベクトルの生成に失敗しました: ${error}`);
   }
 }
@@ -73,8 +114,11 @@ async function generateEmbedding(text: string): Promise<number[]> {
 export async function indexDocument(document: SearchDocument): Promise<void> {
   const { searchClient } = createSearchService();
   try {
-    // テキストの埋め込みベクトルを生成
-    const embedding = await generateEmbedding(document.content);
+    // Embeddingが提供されていない場合は生成
+    let embedding = document.contentVector;
+    if (!embedding) {
+      embedding = await generateEmbedding(document.content);
+    }
     
     const searchDocument = {
       id: document.id,

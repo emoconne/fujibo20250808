@@ -78,8 +78,23 @@ export const similaritySearchVectorWithScore = async (
 ): Promise<Array<AzureCogDocumentIndex & DocumentSearchModel>> => {
   const openai = OpenAIEmbeddingInstance();
 
+  // クエリの検証
+  if (!query || query.trim().length === 0) {
+    console.log('Empty query provided, returning empty results');
+    return [];
+  }
+
+  // 制御文字や無効な文字をチェック
+  const hasInvalidChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(query);
+  if (hasInvalidChars) {
+    console.log('Query contains invalid characters, returning empty results');
+    return [];
+  }
+
+  const cleanQuery = query.trim();
+
   const embeddings = await openai.embeddings.create({
-    input: query,
+    input: cleanQuery,
     model: process.env.AZURE_OPENAI_API_EMBEDDINGS_DEPLOYMENT_NAME,
   });
   const url = `${baseIndexUrl()}/docs/search?api-version=${
@@ -109,21 +124,34 @@ export const similaritySearchVectorWithScore = async (
 export const indexDocuments = async (
   documents: Array<AzureCogDocumentIndex>
 ): Promise<void> => {
-   
-  const url = `${baseIndexUrl()}/docs/index?api-version=${
-    process.env.AZURE_SEARCH_API_VERSION
-  }`;
+  try {
+    console.log('=== indexDocuments START ===');
+    console.log('Documents to index:', documents.length);
+    
+    const url = `${baseIndexUrl()}/docs/index?api-version=${
+      process.env.AZURE_SEARCH_API_VERSION
+    }`;
 
-  await embedDocuments(documents);
-  const documentIndexRequest: DocumentSearchResponseModel<AzureCogDocumentIndex> =
-    {
-      value: documents,
-    };
+    console.log('Generating embeddings...');
+    await embedDocuments(documents);
+    console.log('Embeddings generated successfully');
 
-  await fetcher(url, {
-    method: "POST",
-    body: JSON.stringify(documentIndexRequest),
-  });
+    const documentIndexRequest: DocumentSearchResponseModel<AzureCogDocumentIndex> =
+      {
+        value: documents,
+      };
+
+    console.log('Sending documents to Azure Cognitive Search...');
+    const response = await fetcher(url, {
+      method: "POST",
+      body: JSON.stringify(documentIndexRequest),
+    });
+    
+    console.log('Indexing completed successfully:', response);
+  } catch (error) {
+    console.error('IndexDocuments error:', error);
+    throw error;
+  }
 };
 
 export const deleteDocuments = async (chatThreadId: string): Promise<void> => {
@@ -158,23 +186,154 @@ export const deleteDocuments = async (chatThreadId: string): Promise<void> => {
 export const embedDocuments = async (
   documents: Array<AzureCogDocumentIndex>
 ) => {
-  const openai = OpenAIEmbeddingInstance();
-
   try {
-    const contentsToEmbed = documents.map((d) => d.pageContent);
+    console.log('=== embedDocuments START ===');
+    console.log('Documents to embed:', documents.length);
+    
+    // 各ドキュメントのpageContentの型と内容をログ出力
+    documents.forEach((doc, index) => {
+      console.log(`Document ${index}:`);
+      console.log('  - pageContent type:', typeof doc.pageContent);
+      console.log('  - pageContent is array:', Array.isArray(doc.pageContent));
+      console.log('  - pageContent is object:', doc.pageContent && typeof doc.pageContent === 'object');
+      console.log('  - pageContent value:', doc.pageContent);
+      console.log('  - pageContent length:', doc.pageContent?.length);
+      console.log('  - pageContent keys (if object):', doc.pageContent && typeof doc.pageContent === 'object' ? Object.keys(doc.pageContent) : 'N/A');
+    });
+    
+    const openai = OpenAIEmbeddingInstance();
 
+    // 空のテキストや無効な文字をフィルタリング
+    const contentsToEmbed = documents
+      .map((d, index) => {
+        console.log(`Processing document ${index} pageContent:`, d.pageContent);
+        return d.pageContent;
+      })
+      .filter((content: any, index) => {
+        console.log(`Filtering content ${index}:`, content);
+        console.log(`Content type:`, typeof content);
+        console.log(`Content is array:`, Array.isArray(content));
+        
+        // 型チェック: 文字列でない場合は文字列に変換
+        let contentStr = content;
+        if (typeof content !== 'string') {
+          console.log(`Converting non-string content ${index} to string`);
+          if (Array.isArray(content)) {
+            contentStr = content.join(' ');
+            console.log(`Converted array to string:`, contentStr);
+          } else if (content && typeof content === 'object') {
+            contentStr = JSON.stringify(content);
+            console.log(`Converted object to string:`, contentStr);
+          } else {
+            contentStr = String(content || '');
+            console.log(`Converted other type to string:`, contentStr);
+          }
+        }
+
+        // 空の文字列、null、undefinedを除外
+        if (!contentStr || contentStr.trim().length === 0) {
+          console.log(`Filtering out empty content ${index}`);
+          return false;
+        }
+        
+        // 制御文字や無効な文字をチェック
+        const hasInvalidChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(contentStr);
+        if (hasInvalidChars) {
+          console.log(`Filtering out content ${index} with invalid characters`);
+          return false;
+        }
+        
+        console.log(`Content ${index} passed filter`);
+        return true;
+      })
+      .map((content: any, index) => {
+        console.log(`Mapping content ${index}:`, content);
+        // 型チェック: 文字列でない場合は文字列に変換
+        let contentStr = content;
+        if (typeof content !== 'string') {
+          console.log(`Converting non-string content ${index} to string in map`);
+          if (Array.isArray(content)) {
+            contentStr = content.join(' ');
+          } else if (content && typeof content === 'object') {
+            contentStr = JSON.stringify(content);
+          } else {
+            contentStr = String(content || '');
+          }
+        }
+        const trimmed = contentStr.trim();
+        console.log(`Mapped content ${index} result:`, trimmed);
+        return trimmed; // 前後の空白を削除
+      });
+
+    console.log('Valid contents to embed:', contentsToEmbed.length);
+    console.log('Content lengths:', contentsToEmbed.map(c => c.length));
+
+    // 有効なコンテンツがない場合は早期リターン
+    if (contentsToEmbed.length === 0) {
+      console.log('No valid content to embed');
+      return;
+    }
+
+    console.log('Calling OpenAI embeddings API...');
     const embeddings = await openai.embeddings.create({
       input: contentsToEmbed,
       model: process.env.AZURE_OPENAI_API_EMBEDDINGS_DEPLOYMENT_NAME,
     });
 
-    embeddings.data.forEach((embedding, index) => {
-      documents[index].embedding = embedding.embedding;
+    console.log('Embeddings received:', embeddings.data.length);
+    
+    // embeddingsを対応するドキュメントに割り当て
+    let embeddingIndex = 0;
+    documents.forEach((document, index) => {
+      console.log(`Assigning embedding to document ${index}`);
+      let content: any = document.pageContent;
+      
+      // 型チェック: 文字列でない場合は文字列に変換
+      if (typeof content !== 'string') {
+        console.log(`Converting document ${index} content to string`);
+        if (Array.isArray(content)) {
+          content = content.join(' ');
+        } else if (content && typeof content === 'object') {
+          content = JSON.stringify(content);
+        } else {
+          content = String(content || '');
+        }
+      }
+      
+      const contentStr = content.trim();
+      console.log(`Document ${index} content after trim:`, contentStr);
+      // 有効なコンテンツの場合のみembeddingを割り当て
+      if (contentStr && contentStr.length > 0 && !/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(contentStr)) {
+        if (embeddingIndex < embeddings.data.length) {
+          document.embedding = embeddings.data[embeddingIndex].embedding;
+          console.log(`Assigned embedding ${embeddingIndex} to document ${index}`);
+          embeddingIndex++;
+        }
+      } else {
+        console.log(`Skipped embedding assignment for document ${index}`);
+      }
     });
+    
+    console.log('Embeddings assigned to documents successfully');
   } catch (e) {
-    console.log(e);
+    console.error('EmbedDocuments error:', e);
+    console.error('Error stack:', e instanceof Error ? e.stack : 'No stack trace');
     const error = e as any;
-    throw new Error(`${e} with code ${error.status}`);
+    
+    // より詳細なエラーメッセージを提供
+    if (error.status) {
+      if (error.status === 401) {
+        throw new Error('OpenAI API認証エラー: APIキーを確認してください');
+      } else if (error.status === 429) {
+        throw new Error('OpenAI APIレート制限: しばらく待ってから再試行してください');
+      } else if (error.status === 400) {
+        throw new Error(`OpenAI APIリクエストエラー: ${error.message || '無効なリクエスト'}`);
+      } else {
+        throw new Error(`OpenAI APIエラー (${error.status}): ${error.message || 'Unknown error'}`);
+      }
+    } else {
+      throw new Error(`Embedding生成エラー: ${error.message || 'Unknown error'}`);
+    }
   }
 };
 
@@ -187,36 +346,60 @@ const baseIndexUrl = (): string => {
 };
 
 const fetcher = async (url: string, init?: RequestInit) => {
-  const response = await fetch(url, {
-    ...init,
-    cache: "no-store",
-    headers: {
-      "Content-Type": "application/json",
-      "api-key": process.env.AZURE_SEARCH_API_KEY,
-    },
-  });
+  try {
+    console.log('Fetcher request:', { url, method: init?.method });
+    
+    const response = await fetch(url, {
+      ...init,
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": process.env.AZURE_SEARCH_API_KEY,
+      },
+    });
 
-  if (!response.ok) {
-    if (response.status === 400) {
-      const err = await response.json();
-      throw new Error(err.error.message);
-    } else {
-      throw new Error(`Azure Cog Search Error: ${response.statusText}`);
+    console.log('Fetcher response status:', response.status);
+
+    if (!response.ok) {
+      let errorMessage = `Azure Cognitive Search Error: ${response.status} ${response.statusText}`;
+      
+      try {
+        const err = await response.json();
+        if (err.error?.message) {
+          errorMessage = `Azure Cognitive Search Error: ${err.error.message}`;
+        } else if (err.message) {
+          errorMessage = `Azure Cognitive Search Error: ${err.message}`;
+        }
+      } catch (parseError) {
+        // JSON解析に失敗した場合は、デフォルトのエラーメッセージを使用
+      }
+      
+      throw new Error(errorMessage);
     }
-  }
 
-  return await response.json();
+    const result = await response.json();
+    console.log('Fetcher response received successfully');
+    return result;
+  } catch (error) {
+    console.error('Fetcher error:', error);
+    throw error;
+  }
 };
 
 export const ensureIndexIsCreated = async (): Promise<void> => {
-  const url = `${baseIndexUrl()}?api-version=${
-    process.env.AZURE_SEARCH_API_VERSION
-  }`;
-
   try {
+    console.log('=== ensureIndexIsCreated START ===');
+    const url = `${baseIndexUrl()}?api-version=${
+      process.env.AZURE_SEARCH_API_VERSION
+    }`;
+
+    console.log('Checking if index exists...');
     await fetcher(url);
+    console.log('Index exists, no need to create');
   } catch (e) {
+    console.log('Index does not exist, creating new index...');
     await createCogSearchIndex();
+    console.log('Index created successfully');
   }
 };
 
