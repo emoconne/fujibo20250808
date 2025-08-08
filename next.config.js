@@ -9,9 +9,7 @@ const nextConfig = {
   },
   experimental: {
     esmExternals: 'loose'
-  },
-  // Disable telemetry
-  telemetry: false
+  }
 };
 
 module.exports = nextConfig;
