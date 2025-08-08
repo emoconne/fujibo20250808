@@ -6,7 +6,6 @@ import { AI_NAME } from "@/features/theme/customise";
 import { cn } from "@/lib/utils";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { AuthProvider } from "@/features/providers/auth-provider";
 
 export const dynamic = "force-dynamic";
 
@@ -28,22 +27,20 @@ export default function RootLayout({
         <GlobalConfigProvider
           config={{ speechEnabled: process.env.PUBLIC_SPEECH_ENABLED }}
         >
-          <AuthProvider>
-            <Providers>
-              <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-                <div
-                  className={cn(
-                    inter.className,
-                    "flex w-full p-2 h-full gap-2 bg-background"
-                  )}
-                >
-                  {children}
-                </div>
+          <Providers>
+            <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+              <div
+                className={cn(
+                  inter.className,
+                  "flex w-full p-2 h-full gap-2 bg-primary"
+                )}
+              >
+                {children}
+              </div>
 
-                <Toaster />
-              </ThemeProvider>
-            </Providers>
-          </AuthProvider>
+              <Toaster />
+            </ThemeProvider>
+          </Providers>
         </GlobalConfigProvider>
       </body>
     </html>
