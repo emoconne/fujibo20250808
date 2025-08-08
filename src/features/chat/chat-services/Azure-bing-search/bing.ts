@@ -1,7 +1,7 @@
 // Azure AI Projects SDK経由でのWeb検索
 export class BingSearchResult {
   async SearchWeb(searchText: string) {
-    const projectEndpoint = process.env.AZURE_AI_PROJECT_ENDPOINT || "https://tutorialjbdemoai3fkg2gu-resource.services.ai.azure.com/api/projects/tutorialjbdemoai3fkg2gu-project";
+    const projectEndpoint = process.env.AZURE_AI_FOUNDRY_ENDPOINT || "https://tutorialjbdemoai3fkg2gu-resource.services.ai.azure.com/api/projects/tutorialjbdemoai3fkg2gu-project";
     const agentId = process.env.AZURE_AI_FOUNDRY_AGENT_ID || "asst_MCLyvD44JpMKO8WZIHeWnRyZ";
     
     if (!projectEndpoint || !agentId) {
@@ -12,7 +12,7 @@ export class BingSearchResult {
       
       // 環境変数の詳細なデバッグ情報
       console.log('Debug - Environment variables:');
-      console.log('AZURE_AI_PROJECT_ENDPOINT:', process.env.AZURE_AI_PROJECT_ENDPOINT);
+      console.log('AZURE_AI_FOUNDRY_ENDPOINT:', process.env.AZURE_AI_FOUNDRY_ENDPOINT);
       console.log('AZURE_AI_FOUNDRY_AGENT_ID:', process.env.AZURE_AI_FOUNDRY_AGENT_ID);
       
       throw new Error('Azure AI Project configuration is missing');
