@@ -58,8 +58,14 @@ export class BingSearchResult {
     const { AIProjectClient } = await import("@azure/ai-projects");
     const { DefaultAzureCredential } = await import("@azure/identity");
 
+    console.log('Attempting to authenticate with Azure AI Foundry...');
+    
+    let project;
+    const apiKey = process.env.AZURE_AI_FOUNDRY_API_KEY;
+    
     console.log('Using Entra authentication with Azure CLI...');
-    const project = new AIProjectClient(projectEndpoint, new DefaultAzureCredential());
+    // DefaultAzureCredentialを使用
+    project = new AIProjectClient(projectEndpoint, new DefaultAzureCredential());
     
     // エージェントを取得
     const agent = await project.agents.getAgent(agentId);
