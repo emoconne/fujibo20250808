@@ -63,8 +63,8 @@ export class BingSearchResult {
     let project;
     const apiKey = process.env.AZURE_AI_FOUNDRY_API_KEY;
     
-    console.log('Using Entra authentication with Azure CLI...');
-    // DefaultAzureCredentialを使用
+    console.log('Using Managed Identity authentication...');
+    // マネージドID認証を使用
     project = new AIProjectClient(projectEndpoint, new DefaultAzureCredential());
     
     // エージェントを取得
